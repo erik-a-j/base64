@@ -8,9 +8,11 @@ int main(int argc, char* argv[])
 {
     if (argc == 2)
     {
-        size_t enc_size = B64_ENCODE_SIZE(strlen(argv[1]));
+        size_t enc_size = b64_encode(NULL, argv[1], strlen(argv[1]));
         char* b64 = malloc(enc_size);
-        b64_encode(argv[1], strlen(argv[1]), b64);
+        b64_encode(b64, argv[1], strlen(argv[1]));
+        //B64_ENCODE_SIZE(strlen(argv[1]));
+
         printf("%s\n", b64);
         size_t len;
         uint8_t* original = malloc(B64_DECODE_SIZE(enc_size));
