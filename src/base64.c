@@ -84,16 +84,23 @@ static inline void b64_internal_encode(char* restrict dst,
             while (srclen && dstlen)
             {
                 // clang-format off
+
+                /* B0:b7..b2 >> 2 (1111 1100 -> 0011 1111) */
                 *dst++ = alpha[(src[0] >> 2) & 0x3F];
                 if (!--dstlen) break;
 
-                *dst++ = alpha[((src[0] << 4) + (--srclen ? (src[1] >> 4) : 0)) & 0x3F];
+                /* B0:b1..b0 << 4 (0000 0011 -> 0011 0000) 
+                   B1:b7..b4 >> 4 (1111 0000 -> 0000 1111) */
+                *dst++ = alpha[((src[0] << 4) & 0x30) + (--srclen ? (src[1] >> 4) & 0x0F : 0)];
                 if (!--dstlen) break;
 
-                *dst++ = (srclen ? alpha[((src[1] << 2) + (--srclen ? (src[2] >> 6) : 0)) & 0x3F] 
-                                : '=');
+                /* B1:b3..b0 << 2 (0000 1111 -> 0011 1100) 
+                   B2:b7..b6 >> 6 (1100 0000 -> 0000 0011) */
+                *dst++ = (srclen ? alpha[((src[1] << 2) & 0x3C /*0011 1100*/) + (--srclen ? (src[2] >> 6) & 0x03 : 0)] 
+                                 : '=');
                 if (!--dstlen) break;
 
+                /* B2:b5..b0 (0011 1111) */
                 *dst++ = srclen ? alpha[src[2] & 0x3F] 
                                 : '=';
                 if (!--dstlen) break;
