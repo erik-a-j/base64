@@ -30,81 +30,111 @@
 #include <string.h>
 #include <unistd.h>
 
-typedef enum {
-    B64_ENC0,
-    B64_ENC1,
-    B64_ENC2,
-    B64_ENC3,
-} b64_enc_block_idx_t;
+#ifndef B64_FD_READ_BUFSIZE
+#define B64_FD_READ_BUFSIZE 1200
+#endif
+_Static_assert(B64_FD_READ_BUFSIZE % 3 == 0, "B64_FD_READ_BUFSIZE has to be a multiple of 3");
 
 static const char* B64_ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-static const char* B64URL_ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+static const char* B64URL_ALPHA =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 static const int8_t B64_DEC[256] = {
-    ['A'] = 0,  ['B'] = 1,  ['C'] = 2,  ['D'] = 3,  ['E'] = 4,  ['F'] = 5,  ['G'] = 6,  ['H'] = 7,  ['I'] = 8,
-    ['J'] = 9,  ['K'] = 10, ['L'] = 11, ['M'] = 12, ['N'] = 13, ['O'] = 14, ['P'] = 15, ['Q'] = 16, ['R'] = 17,
-    ['S'] = 18, ['T'] = 19, ['U'] = 20, ['V'] = 21, ['W'] = 22, ['X'] = 23, ['Y'] = 24, ['Z'] = 25, ['a'] = 26,
-    ['b'] = 27, ['c'] = 28, ['d'] = 29, ['e'] = 30, ['f'] = 31, ['g'] = 32, ['h'] = 33, ['i'] = 34, ['j'] = 35,
-    ['k'] = 36, ['l'] = 37, ['m'] = 38, ['n'] = 39, ['o'] = 40, ['p'] = 41, ['q'] = 42, ['r'] = 43, ['s'] = 44,
-    ['t'] = 45, ['u'] = 46, ['v'] = 47, ['w'] = 48, ['x'] = 49, ['y'] = 50, ['z'] = 51, ['0'] = 52, ['1'] = 53,
-    ['2'] = 54, ['3'] = 55, ['4'] = 56, ['5'] = 57, ['6'] = 58, ['7'] = 59, ['8'] = 60, ['9'] = 61, ['+'] = 62,
-    ['-'] = 62, ['/'] = 63, ['_'] = 63, ['='] = -2 /* padding sentinel */
+    ['A'] = 0,  ['B'] = 1,  ['C'] = 2,  ['D'] = 3,  ['E'] = 4,  ['F'] = 5,  ['G'] = 6,  ['H'] = 7,
+    ['I'] = 8,  ['J'] = 9,  ['K'] = 10, ['L'] = 11, ['M'] = 12, ['N'] = 13, ['O'] = 14, ['P'] = 15,
+    ['Q'] = 16, ['R'] = 17, ['S'] = 18, ['T'] = 19, ['U'] = 20, ['V'] = 21, ['W'] = 22, ['X'] = 23,
+    ['Y'] = 24, ['Z'] = 25, ['a'] = 26, ['b'] = 27, ['c'] = 28, ['d'] = 29, ['e'] = 30, ['f'] = 31,
+    ['g'] = 32, ['h'] = 33, ['i'] = 34, ['j'] = 35, ['k'] = 36, ['l'] = 37, ['m'] = 38, ['n'] = 39,
+    ['o'] = 40, ['p'] = 41, ['q'] = 42, ['r'] = 43, ['s'] = 44, ['t'] = 45, ['u'] = 46, ['v'] = 47,
+    ['w'] = 48, ['x'] = 49, ['y'] = 50, ['z'] = 51, ['0'] = 52, ['1'] = 53, ['2'] = 54, ['3'] = 55,
+    ['4'] = 56, ['5'] = 57, ['6'] = 58, ['7'] = 59, ['8'] = 60, ['9'] = 61, ['+'] = 62, ['-'] = 62,
+    ['/'] = 63, ['_'] = 63, ['='] = -2 /* padding sentinel */
 };
 
-static inline int b64_alpha_index(const uint8_t* blk, b64_enc_block_idx_t i)
+static inline void b64_internal_encode_fast(char* restrict dst,
+                                            const uint8_t* restrict src,
+                                            size_t srclen,
+                                            const char* alpha)
 {
-    return (i == B64_ENC0 ? blk[0] >> 2
-                          : (i == B64_ENC1 ? ((blk[0] & 0x03) << 4) | (blk[1] >> 4)
-                                           : (i == B64_ENC2 ? ((blk[1] & 0x0F) << 2) | (blk[2] >> 6)
-                                                            : /*i == B64_ENC3*/ blk[2] & 0x3F)));
+    while (srclen)
+    {
+        *dst++ = alpha[(src[0] >> 2) & 0x3F];
+        *dst++ = alpha[((src[0] << 4) + (src[1] >> 4)) & 0x3F];
+        *dst++ = alpha[((src[1] << 2) + (src[2] >> 6)) & 0x3F];
+        *dst++ = alpha[src[2] & 0x3F];
+
+        srclen -= 3;
+        src += 3;
+    }
 }
 
-static inline size_t b64_internal_encode(char* dst, const uint8_t* src, size_t len, const char* alpha)
+static inline void b64_internal_encode(char* restrict dst,
+                                       size_t dstlen,
+                                       const uint8_t* restrict src,
+                                       size_t srclen,
+                                       const char* alpha)
 {
     if (dst && src)
     {
-        char* p = dst;
-        size_t i = 0;
-
-        for (; i + 3 <= len; i += 3)
+        if (dstlen % 4 == 0 && srclen == (dstlen >> 2) * 3)
         {
-            *p++ = alpha[b64_alpha_index(src + i, B64_ENC0)];
-            *p++ = alpha[b64_alpha_index(src + i, B64_ENC1)];
-            *p++ = alpha[b64_alpha_index(src + i, B64_ENC2)];
-            *p++ = alpha[b64_alpha_index(src + i, B64_ENC3)];
-            //*p++ = alpha[src[i] >> 2];
-            //*p++ = alpha[((src[i] & 0x03) << 4) | (src[i + 1] >> 4)];
-            //*p++ = alpha[((src[i + 1] & 0x0F) << 2) | (src[i + 2] >> 6)];
-            //*p++ = alpha[src[i + 2] & 0x3F];
+            b64_internal_encode_fast(dst, src, srclen, alpha);
         }
-
-        size_t rem = len - i;
-        if (rem == 1)
+        else
         {
-            *p++ = alpha[src[i] >> 2];
-            *p++ = alpha[(src[i] & 0x03) << 4];
-            *p++ = '=';
-            *p++ = '=';
-        }
-        else if (rem == 2)
-        {
-            *p++ = alpha[src[i] >> 2];
-            *p++ = alpha[((src[i] & 0x03) << 4) | (src[i + 1] >> 4)];
-            *p++ = alpha[(src[i + 1] & 0x0F) << 2];
-            *p++ = '=';
-        }
+            while (srclen && dstlen)
+            {
+                // clang-format off
+                *dst++ = alpha[(src[0] >> 2) & 0x3F];
+                if (!--dstlen) break;
 
-        *p = '\0';
+                *dst++ = alpha[((src[0] << 4) + (--srclen ? (src[1] >> 4) : 0)) & 0x3F];
+                if (!--dstlen) break;
+
+                *dst++ = (srclen ? alpha[((src[1] << 2) + (--srclen ? (src[2] >> 6) : 0)) & 0x3F] 
+                                : '=');
+                if (!--dstlen) break;
+
+                *dst++ = srclen ? alpha[src[2] & 0x3F] 
+                                : '=';
+                if (!--dstlen) break;
+
+                if (srclen && --srclen) src += 3;
+                // clang-format on
+            }
+            if (dstlen) *dst = '\0';
+        }
     }
-    return B64_ENCODE_SIZE(len);
 }
 
-size_t b64_encode(char* dst, const uint8_t* src, size_t len)
+void b64_encode(char* dst, size_t dstlen, const uint8_t* src, size_t srclen)
 {
-    return b64_internal_encode(dst, src, len, B64_ALPHA);
+    b64_internal_encode(dst, dstlen, src, srclen, B64_ALPHA);
 }
-size_t b64url_encode(char* dst, const uint8_t* src, size_t len)
+void b64url_encode(char* dst, size_t dstlen, const uint8_t* src, size_t srclen)
 {
-    return b64_internal_encode(dst, src, len, B64URL_ALPHA);
+    b64_internal_encode(dst, dstlen, src, srclen, B64URL_ALPHA);
+}
+void b64_encode_fd(char* dst, size_t dstlen, int fd, size_t srclen)
+{
+    uint8_t buf[B64_FD_READ_BUFSIZE];
+    while (srclen && dstlen)
+    {
+        size_t nwant = B64_FD_READ_BUFSIZE < srclen ? B64_FD_READ_BUFSIZE : srclen;
+        size_t nread = 0;
+        while (nread != nwant)
+        {
+            ssize_t n = read(fd, buf + nread, nwant - nread);
+            if (0 > n) return;
+            nread += (size_t)n;
+        }
+
+        size_t enclen = B64_ENCODE_SIZE(nread);
+        b64_encode(dst, enclen, buf, nread);
+
+        srclen -= nread;
+        dstlen -= enclen;
+        dst += enclen;
+    }
 }
 
 size_t b64_decode(uint8_t* dst, const char* src, size_t len)

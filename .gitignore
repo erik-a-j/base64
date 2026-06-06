@@ -1,3 +1,13 @@
-a.out
-c/*
+*
+!src
+!src/*.c
+!src/*.h
+!c
 !c/*.c
+!c/out
+!data
+!data/*.bin
+!.clang-format
+!.clang-format.Google
+!README.md
+!.gitignore
