@@ -30,28 +30,35 @@
 #include <string.h>
 #include <unistd.h>
 
-#define B64_ENCODE_BLOCKSIZE 1200
-
 typedef enum {
-    B64_BYTEBUFFER,
-    B64_FD,
-} b64_encode_src_type;
+    B64_ENC0,
+    B64_ENC1,
+    B64_ENC2,
+    B64_ENC3,
+} b64_enc_block_idx_t;
 
 static const char* B64_ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static const char* B64URL_ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 static const int8_t B64_DEC[256] = {
-    ['A'] = 0,  ['B'] = 1,  ['C'] = 2,  ['D'] = 3,  ['E'] = 4,  ['F'] = 5,  ['G'] = 6,  ['H'] = 7,
-    ['I'] = 8,  ['J'] = 9,  ['K'] = 10, ['L'] = 11, ['M'] = 12, ['N'] = 13, ['O'] = 14, ['P'] = 15,
-    ['Q'] = 16, ['R'] = 17, ['S'] = 18, ['T'] = 19, ['U'] = 20, ['V'] = 21, ['W'] = 22, ['X'] = 23,
-    ['Y'] = 24, ['Z'] = 25, ['a'] = 26, ['b'] = 27, ['c'] = 28, ['d'] = 29, ['e'] = 30, ['f'] = 31,
-    ['g'] = 32, ['h'] = 33, ['i'] = 34, ['j'] = 35, ['k'] = 36, ['l'] = 37, ['m'] = 38, ['n'] = 39,
-    ['o'] = 40, ['p'] = 41, ['q'] = 42, ['r'] = 43, ['s'] = 44, ['t'] = 45, ['u'] = 46, ['v'] = 47,
-    ['w'] = 48, ['x'] = 49, ['y'] = 50, ['z'] = 51, ['0'] = 52, ['1'] = 53, ['2'] = 54, ['3'] = 55,
-    ['4'] = 56, ['5'] = 57, ['6'] = 58, ['7'] = 59, ['8'] = 60, ['9'] = 61, ['+'] = 62, ['-'] = 62,
-    ['/'] = 63, ['_'] = 63, ['='] = -2 /* padding sentinel */
+    ['A'] = 0,  ['B'] = 1,  ['C'] = 2,  ['D'] = 3,  ['E'] = 4,  ['F'] = 5,  ['G'] = 6,  ['H'] = 7,  ['I'] = 8,
+    ['J'] = 9,  ['K'] = 10, ['L'] = 11, ['M'] = 12, ['N'] = 13, ['O'] = 14, ['P'] = 15, ['Q'] = 16, ['R'] = 17,
+    ['S'] = 18, ['T'] = 19, ['U'] = 20, ['V'] = 21, ['W'] = 22, ['X'] = 23, ['Y'] = 24, ['Z'] = 25, ['a'] = 26,
+    ['b'] = 27, ['c'] = 28, ['d'] = 29, ['e'] = 30, ['f'] = 31, ['g'] = 32, ['h'] = 33, ['i'] = 34, ['j'] = 35,
+    ['k'] = 36, ['l'] = 37, ['m'] = 38, ['n'] = 39, ['o'] = 40, ['p'] = 41, ['q'] = 42, ['r'] = 43, ['s'] = 44,
+    ['t'] = 45, ['u'] = 46, ['v'] = 47, ['w'] = 48, ['x'] = 49, ['y'] = 50, ['z'] = 51, ['0'] = 52, ['1'] = 53,
+    ['2'] = 54, ['3'] = 55, ['4'] = 56, ['5'] = 57, ['6'] = 58, ['7'] = 59, ['8'] = 60, ['9'] = 61, ['+'] = 62,
+    ['-'] = 62, ['/'] = 63, ['_'] = 63, ['='] = -2 /* padding sentinel */
 };
 
-static inline size_t b64_internal_encode(char* dst, const void* src, size_t len,
-                                         b64_encode_src_type src_type)
+static inline int b64_alpha_index(const uint8_t* blk, b64_enc_block_idx_t i)
+{
+    return (i == B64_ENC0 ? blk[0] >> 2
+                          : (i == B64_ENC1 ? ((blk[0] & 0x03) << 4) | (blk[1] >> 4)
+                                           : (i == B64_ENC2 ? ((blk[1] & 0x0F) << 2) | (blk[2] >> 6)
+                                                            : /*i == B64_ENC3*/ blk[2] & 0x3F)));
+}
+
+static inline size_t b64_internal_encode(char* dst, const uint8_t* src, size_t len, const char* alpha)
 {
     if (dst && src)
     {
@@ -60,25 +67,29 @@ static inline size_t b64_internal_encode(char* dst, const void* src, size_t len,
 
         for (; i + 3 <= len; i += 3)
         {
-            *p++ = B64_ALPHA[src[i] >> 2];
-            *p++ = B64_ALPHA[((src[i] & 0x03) << 4) | (src[i + 1] >> 4)];
-            *p++ = B64_ALPHA[((src[i + 1] & 0x0F) << 2) | (src[i + 2] >> 6)];
-            *p++ = B64_ALPHA[src[i + 2] & 0x3F];
+            *p++ = alpha[b64_alpha_index(src + i, B64_ENC0)];
+            *p++ = alpha[b64_alpha_index(src + i, B64_ENC1)];
+            *p++ = alpha[b64_alpha_index(src + i, B64_ENC2)];
+            *p++ = alpha[b64_alpha_index(src + i, B64_ENC3)];
+            //*p++ = alpha[src[i] >> 2];
+            //*p++ = alpha[((src[i] & 0x03) << 4) | (src[i + 1] >> 4)];
+            //*p++ = alpha[((src[i + 1] & 0x0F) << 2) | (src[i + 2] >> 6)];
+            //*p++ = alpha[src[i + 2] & 0x3F];
         }
 
         size_t rem = len - i;
         if (rem == 1)
         {
-            *p++ = B64_ALPHA[src[i] >> 2];
-            *p++ = B64_ALPHA[(src[i] & 0x03) << 4];
+            *p++ = alpha[src[i] >> 2];
+            *p++ = alpha[(src[i] & 0x03) << 4];
             *p++ = '=';
             *p++ = '=';
         }
         else if (rem == 2)
         {
-            *p++ = B64_ALPHA[src[i] >> 2];
-            *p++ = B64_ALPHA[((src[i] & 0x03) << 4) | (src[i + 1] >> 4)];
-            *p++ = B64_ALPHA[(src[i + 1] & 0x0F) << 2];
+            *p++ = alpha[src[i] >> 2];
+            *p++ = alpha[((src[i] & 0x03) << 4) | (src[i + 1] >> 4)];
+            *p++ = alpha[(src[i + 1] & 0x0F) << 2];
             *p++ = '=';
         }
 
@@ -89,26 +100,11 @@ static inline size_t b64_internal_encode(char* dst, const void* src, size_t len,
 
 size_t b64_encode(char* dst, const uint8_t* src, size_t len)
 {
-    return b64_internal_encode(dst, src, len);
+    return b64_internal_encode(dst, src, len, B64_ALPHA);
 }
 size_t b64url_encode(char* dst, const uint8_t* src, size_t len)
 {
-    size_t out_len = b64_internal_encode(dst, src, len);
-    if (dst && src)
-    {
-        for (char* p = dst; p < dst + out_len; ++p)
-        {
-            if (*p == '+')
-            {
-                *p = '-';
-            }
-            else if (*p == '/')
-            {
-                *p = '_';
-            }
-        }
-    }
-    return out_len;
+    return b64_internal_encode(dst, src, len, B64URL_ALPHA);
 }
 
 size_t b64_decode(uint8_t* dst, const char* src, size_t len)
