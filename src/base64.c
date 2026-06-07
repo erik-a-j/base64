@@ -22,6 +22,13 @@
  *   0-61 same
  *   62 - (minus)
  *   63 _ (underline)
+ *
+ *
+ *  ┍━━━╸octlet0╺━━━┯━━━╸octlet1╺━━━┯━━━╸octlet2╺━━━┑
+ *  ┊7 6 5 4 3 2 1 0┊7 6 5 4 3 2 1 0┊7 6 5 4 3 2 1 0┊
+ *  ┝━━━━━━━━━━━┯━━━┷━━━━━━━┯━━━━━━━┷━━━┯━━━━━━━━━━━┥
+ *  ┊5 4 3 2 1 0┊5 4 3 2 1 0┊5 4 3 2 1 0┊5 4 3 2 1 0┊
+ *  ┕━━━━╸0╺━━━━┷━━━━╸1╺━━━━┷━━━━╸2╺━━━━┷━━━━╸3╺━━━━┙
  */
 
 #include "base64.h"
@@ -36,16 +43,7 @@
 #endif
 _Static_assert(B64_FD_READ_BUFSIZE % 3 == 0, "B64_FD_READ_BUFSIZE has to be a multiple of 3");
 #endif
-
-#define B64_INDEX_WIDTH (6)
-#define B64_INDEX_MASK  ((1U << B64_INDEX_WIDTH) - 1)
-
-static const char* B64_ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
 #if 0
-static const char* B64URL_ALPHA =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-
 static const int8_t B64_DEC[256] = {
     ['A'] = 0,  ['B'] = 1,  ['C'] = 2,  ['D'] = 3,  ['E'] = 4,  ['F'] = 5,  ['G'] = 6,  ['H'] = 7,
     ['I'] = 8,  ['J'] = 9,  ['K'] = 10, ['L'] = 11, ['M'] = 12, ['N'] = 13, ['O'] = 14, ['P'] = 15,
@@ -58,104 +56,154 @@ static const int8_t B64_DEC[256] = {
     ['/'] = 63, ['_'] = 63, ['='] = -2 /* padding sentinel */
 };
 #endif
+#if 1
+static const int8_t B64_DEC[256] = {
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         62 /*'+'*/, -1,         -1,         -1,         63 /*'/'*/,
+    52 /*'0'*/, 53 /*'1'*/, 54 /*'2'*/, 55 /*'3'*/, 56 /*'4'*/, 57 /*'5'*/, 58 /*'6'*/, 59 /*'7'*/,
+    60 /*'8'*/, 61 /*'9'*/, -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         0 /*'A'*/,  1 /*'B'*/,  2 /*'C'*/,  3 /*'D'*/,  4 /*'E'*/,  5 /*'F'*/,  6 /*'G'*/,
+    7 /*'H'*/,  8 /*'I'*/,  9 /*'J'*/,  10 /*'K'*/, 11 /*'L'*/, 12 /*'M'*/, 13 /*'N'*/, 14 /*'O'*/,
+    15 /*'P'*/, 16 /*'Q'*/, 17 /*'R'*/, 18 /*'S'*/, 19 /*'T'*/, 20 /*'U'*/, 21 /*'V'*/, 22 /*'W'*/,
+    23 /*'X'*/, 24 /*'Y'*/, 25 /*'Z'*/, -1,         -1,         -1,         -1,         -1,
+    -1,         26 /*'a'*/, 27 /*'b'*/, 28 /*'c'*/, 29 /*'d'*/, 30 /*'e'*/, 31 /*'f'*/, 32 /*'g'*/,
+    33 /*'h'*/, 34 /*'i'*/, 35 /*'j'*/, 36 /*'k'*/, 37 /*'l'*/, 38 /*'m'*/, 39 /*'n'*/, 40 /*'o'*/,
+    41 /*'p'*/, 42 /*'q'*/, 43 /*'r'*/, 44 /*'s'*/, 45 /*'t'*/, 46 /*'u'*/, 47 /*'v'*/, 48 /*'w'*/,
+    49 /*'x'*/, 50 /*'y'*/, 51 /*'z'*/, -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+};
 
-static inline void b64_internal_encode_fast(char* restrict dst,
-                                            const uint8_t* restrict src,
-                                            size_t srclen,
-                                            const char* alpha)
-{
-    while (srclen)
-    {
-        *dst++ = alpha[(src[0] >> 2) & 0x3F];
-        *dst++ = alpha[((src[0] << 4) + (src[1] >> 4)) & 0x3F];
-        *dst++ = alpha[((src[1] << 2) + (src[2] >> 6)) & 0x3F];
-        *dst++ = alpha[src[2] & 0x3F];
+static const int8_t B64URL_DEC[256] = {
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         62 /*'-'*/, -1,         -1,
+    52 /*'0'*/, 53 /*'1'*/, 54 /*'2'*/, 55 /*'3'*/, 56 /*'4'*/, 57 /*'5'*/, 58 /*'6'*/, 59 /*'7'*/,
+    60 /*'8'*/, 61 /*'9'*/, -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         0 /*'A'*/,  1 /*'B'*/,  2 /*'C'*/,  3 /*'D'*/,  4 /*'E'*/,  5 /*'F'*/,  6 /*'G'*/,
+    7 /*'H'*/,  8 /*'I'*/,  9 /*'J'*/,  10 /*'K'*/, 11 /*'L'*/, 12 /*'M'*/, 13 /*'N'*/, 14 /*'O'*/,
+    15 /*'P'*/, 16 /*'Q'*/, 17 /*'R'*/, 18 /*'S'*/, 19 /*'T'*/, 20 /*'U'*/, 21 /*'V'*/, 22 /*'W'*/,
+    23 /*'X'*/, 24 /*'Y'*/, 25 /*'Z'*/, -1,         -1,         -1,         -1,         63 /*'_'*/,
+    -1,         26 /*'a'*/, 27 /*'b'*/, 28 /*'c'*/, 29 /*'d'*/, 30 /*'e'*/, 31 /*'f'*/, 32 /*'g'*/,
+    33 /*'h'*/, 34 /*'i'*/, 35 /*'j'*/, 36 /*'k'*/, 37 /*'l'*/, 38 /*'m'*/, 39 /*'n'*/, 40 /*'o'*/,
+    41 /*'p'*/, 42 /*'q'*/, 43 /*'r'*/, 44 /*'s'*/, 45 /*'t'*/, 46 /*'u'*/, 47 /*'v'*/, 48 /*'w'*/,
+    49 /*'x'*/, 50 /*'y'*/, 51 /*'z'*/, -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+    -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,
+};
+#endif
 
-        srclen -= 3;
-        src += 3;
-    }
-}
-
+#define B64_ALPHA 0
+#define B64URL_ALPHA    1
 static inline void b64_internal_encode(char* restrict dst,
-                                       size_t dstlen,
                                        const uint8_t* restrict src,
                                        size_t srclen,
-                                       const char* alpha)
+                                       int alpha_kind)
 {
-    if (dst && src)
+    const char* alpha = alpha_kind == B64_ALPHA
+                          ? "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+                          : "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    char* p = dst;
+    size_t i = 0;
+    for (; i + 3 <= srclen; i += 3)
     {
-        if (dstlen % 4 == 0 && srclen == (dstlen >> 2) * 3)
-        {
-            b64_internal_encode_fast(dst, src, srclen, alpha);
-        }
-        else
-        {
-            while (srclen && dstlen)
-            {
-                // clang-format off
-                
-                //uint8_t octlet0 = src[0];
-                //uint8_t octlet1 = src[1];
-                //uint8_t octlet2 = src[2];
-                
-                /* ┍━━━╸octlet0╺━━━┯━━━╸octlet1╺━━━┯━━━╸octlet2╺━━━┑
-                   ┊7 6 5 4 3 2 1 0┊7 6 5 4 3 2 1 0┊7 6 5 4 3 2 1 0┊
-                   ┝━━━━━━━━━━━┯━━━┷━━━━━━━┯━━━━━━━┷━━━┯━━━━━━━━━━━┥
-                   ┊5 4 3 2 1 0┊5 4 3 2 1 0┊5 4 3 2 1 0┊5 4 3 2 1 0┊
-                   ┕━━━━╸0╺━━━━┷━━━━╸1╺━━━━┷━━━━╸2╺━━━━┷━━━━╸3╺━━━━┙ */
-
-                *dst++ = alpha[(src[0] >> 2) & 0x3F];
-                if (!--dstlen) break;
-
-                *dst++ = alpha[((src[0] << 4) & 0x30) + (--srclen ? (src[1] >> 4) & 0x0F : 0)];
-                if (!--dstlen) break;
-
-                *dst++ = (srclen ? alpha[((src[1] << 2) & 0x3C) + (--srclen ? (src[2] >> 6) & 0x03 : 0)] 
-                                 : '=');
-                if (!--dstlen) break;
-
-                *dst++ = srclen ? alpha[src[2] & 0x3F] 
-                                : '=';
-                if (!--dstlen) break;
-
-                if (srclen && --srclen) src += 3;
-                // clang-format on
-            }
-            if (dstlen) *dst = '\0';
-        }
+        *p++ = alpha[(src[i] >> 2) & 0x3F];
+        *p++ = alpha[((src[i] << 4) + (src[i + 1] >> 4)) & 0x3F];
+        *p++ = alpha[((src[i + 1] << 2) + (src[i + 2] >> 6)) & 0x3F];
+        *p++ = alpha[src[i + 2] & 0x3F];
+    }
+    size_t rem = srclen - i;
+    if (rem == 1)
+    {
+        *p++ = alpha[(src[i] >> 2) & 0x3F];
+        *p++ = alpha[(src[i] << 4) & 0x3F];
+        *p++ = '=';
+        *p++ = '=';
+    }
+    else /* (rem == 2) */
+    {
+        *p++ = alpha[(src[i] >> 2) & 0x3F];
+        *p++ = alpha[((src[i] << 4) + (src[i + 1] >> 4)) & 0x3F];
+        *p++ = alpha[(src[i + 1] << 2) & 0x3F];
+        *p++ = '=';
     }
 }
 
-void b64_encode(char* dst, size_t dstlen, const uint8_t* src, size_t srclen)
+void b64_encode(char* restrict dst, const uint8_t* restrict src, size_t srclen)
 {
-    b64_internal_encode(dst, dstlen, src, srclen, B64_ALPHA);
+    b64_internal_encode(dst, src, srclen, B64_ALPHA);
 }
-#if 0
-void b64url_encode(char* dst, size_t dstlen, const uint8_t* src, size_t srclen)
+void b64url_encode(char* restrict dst, const uint8_t* restrict src, size_t srclen)
 {
-    b64_internal_encode(dst, dstlen, src, srclen, B64URL_ALPHA);
+    b64_internal_encode(dst, src, srclen, B64URL_ALPHA);
 }
-void b64_encode_fd(char* dst, size_t dstlen, int fd, size_t srclen)
+
+static inline bool b64_internal_decode(uint8_t* restrict dst,
+                                       size_t* restrict dstlen,
+                                       const char* restrict src,
+                                       size_t srclen,
+                                       int alpha_kind)
 {
-    uint8_t buf[B64_FD_READ_BUFSIZE];
-    while (srclen && dstlen)
+    if (srclen % 4 != 0) return false;
+    while (src[srclen - 1] == '=') --srclen;
+
+    const int8_t* dec = alpha_kind == B64_ALPHA ? B64_DEC : B64URL_DEC;
+    uint8_t* p = dst;
+    size_t i = 0;
+    bool ok = true;
+    for (; i + 4 <= srclen; i += 4)
     {
-        size_t nwant = B64_FD_READ_BUFSIZE < srclen ? B64_FD_READ_BUFSIZE : srclen;
-        size_t nread = 0;
-        while (nread != nwant)
+        int8_t c0 = dec[(uint8_t)src[i]];
+        int8_t c1 = dec[(uint8_t)src[i + 1]];
+        int8_t c2 = dec[(uint8_t)src[i + 2]];
+        int8_t c3 = dec[(uint8_t)src[i + 3]];
+        if (ok && (c0 < 0 || c1 < 0 || c2 < 0 || c3 < 0))
         {
-            ssize_t n = read(fd, buf + nread, nwant - nread);
-            if (0 > n) return;
-            nread += (size_t)n;
+            ok = false;
+            *dstlen = (size_t)(p - dst);
         }
 
-        size_t enclen = B64_ENCODE_SIZE(nread);
-        b64_encode(dst, enclen, buf, nread);
-
-        srclen -= nread;
-        dstlen -= enclen;
-        dst += enclen;
+        *p++ = (uint8_t)((c0 << 2) | (c1 >> 4));
+        *p++ = (uint8_t)((c1 << 4) | (c2 >> 2));
+        *p++ = (uint8_t)((c2 << 6) | c3);
     }
+
+    return ok;
 }
 size_t b64_decode(uint8_t* dst, const char* src, size_t len)
 {
@@ -198,4 +246,30 @@ size_t b64_decode(uint8_t* dst, const char* src, size_t len)
 
     return out_len;
 }
+
+#if 0
+
+void b64_encode_fd(char* dst, size_t dstlen, int fd, size_t srclen)
+{
+    uint8_t buf[B64_FD_READ_BUFSIZE];
+    while (srclen && dstlen)
+    {
+        size_t nwant = B64_FD_READ_BUFSIZE < srclen ? B64_FD_READ_BUFSIZE : srclen;
+        size_t nread = 0;
+        while (nread != nwant)
+        {
+            ssize_t n = read(fd, buf + nread, nwant - nread);
+            if (0 > n) return;
+            nread += (size_t)n;
+        }
+
+        size_t enclen = B64_ENCODE_SIZE(nread);
+        b64_encode(dst, enclen, buf, nread);
+
+        srclen -= nread;
+        dstlen -= enclen;
+        dst += enclen;
+    }
+}
+
 #endif
