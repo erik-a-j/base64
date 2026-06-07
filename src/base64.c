@@ -30,14 +30,22 @@
 #include <string.h>
 #include <unistd.h>
 
+#if 0
 #ifndef B64_FD_READ_BUFSIZE
-#define B64_FD_READ_BUFSIZE 1200
+#define B64_FD_READ_BUFSIZE (1200)
 #endif
 _Static_assert(B64_FD_READ_BUFSIZE % 3 == 0, "B64_FD_READ_BUFSIZE has to be a multiple of 3");
+#endif
+
+#define B64_INDEX_WIDTH (6)
+#define B64_INDEX_MASK  ((1U << B64_INDEX_WIDTH) - 1)
 
 static const char* B64_ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+#if 0
 static const char* B64URL_ALPHA =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
 static const int8_t B64_DEC[256] = {
     ['A'] = 0,  ['B'] = 1,  ['C'] = 2,  ['D'] = 3,  ['E'] = 4,  ['F'] = 5,  ['G'] = 6,  ['H'] = 7,
     ['I'] = 8,  ['J'] = 9,  ['K'] = 10, ['L'] = 11, ['M'] = 12, ['N'] = 13, ['O'] = 14, ['P'] = 15,
@@ -49,6 +57,7 @@ static const int8_t B64_DEC[256] = {
     ['4'] = 56, ['5'] = 57, ['6'] = 58, ['7'] = 59, ['8'] = 60, ['9'] = 61, ['+'] = 62, ['-'] = 62,
     ['/'] = 63, ['_'] = 63, ['='] = -2 /* padding sentinel */
 };
+#endif
 
 static inline void b64_internal_encode_fast(char* restrict dst,
                                             const uint8_t* restrict src,
@@ -84,23 +93,27 @@ static inline void b64_internal_encode(char* restrict dst,
             while (srclen && dstlen)
             {
                 // clang-format off
+                
+                //uint8_t octlet0 = src[0];
+                //uint8_t octlet1 = src[1];
+                //uint8_t octlet2 = src[2];
+                
+                /* ┍━━━╸octlet0╺━━━┯━━━╸octlet1╺━━━┯━━━╸octlet2╺━━━┑
+                   ┊7 6 5 4 3 2 1 0┊7 6 5 4 3 2 1 0┊7 6 5 4 3 2 1 0┊
+                   ┝━━━━━━━━━━━┯━━━┷━━━━━━━┯━━━━━━━┷━━━┯━━━━━━━━━━━┥
+                   ┊5 4 3 2 1 0┊5 4 3 2 1 0┊5 4 3 2 1 0┊5 4 3 2 1 0┊
+                   ┕━━━━╸0╺━━━━┷━━━━╸1╺━━━━┷━━━━╸2╺━━━━┷━━━━╸3╺━━━━┙ */
 
-                /* B0:b7..b2 >> 2 (1111 1100 -> 0011 1111) */
                 *dst++ = alpha[(src[0] >> 2) & 0x3F];
                 if (!--dstlen) break;
 
-                /* B0:b1..b0 << 4 (0000 0011 -> 0011 0000) 
-                   B1:b7..b4 >> 4 (1111 0000 -> 0000 1111) */
                 *dst++ = alpha[((src[0] << 4) & 0x30) + (--srclen ? (src[1] >> 4) & 0x0F : 0)];
                 if (!--dstlen) break;
 
-                /* B1:b3..b0 << 2 (0000 1111 -> 0011 1100) 
-                   B2:b7..b6 >> 6 (1100 0000 -> 0000 0011) */
-                *dst++ = (srclen ? alpha[((src[1] << 2) & 0x3C /*0011 1100*/) + (--srclen ? (src[2] >> 6) & 0x03 : 0)] 
+                *dst++ = (srclen ? alpha[((src[1] << 2) & 0x3C) + (--srclen ? (src[2] >> 6) & 0x03 : 0)] 
                                  : '=');
                 if (!--dstlen) break;
 
-                /* B2:b5..b0 (0011 1111) */
                 *dst++ = srclen ? alpha[src[2] & 0x3F] 
                                 : '=';
                 if (!--dstlen) break;
@@ -117,6 +130,7 @@ void b64_encode(char* dst, size_t dstlen, const uint8_t* src, size_t srclen)
 {
     b64_internal_encode(dst, dstlen, src, srclen, B64_ALPHA);
 }
+#if 0
 void b64url_encode(char* dst, size_t dstlen, const uint8_t* src, size_t srclen)
 {
     b64_internal_encode(dst, dstlen, src, srclen, B64URL_ALPHA);
@@ -143,7 +157,6 @@ void b64_encode_fd(char* dst, size_t dstlen, int fd, size_t srclen)
         dst += enclen;
     }
 }
-
 size_t b64_decode(uint8_t* dst, const char* src, size_t len)
 {
     size_t out_len = len;
@@ -185,3 +198,4 @@ size_t b64_decode(uint8_t* dst, const char* src, size_t len)
 
     return out_len;
 }
+#endif
